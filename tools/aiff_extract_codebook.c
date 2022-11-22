@@ -15,13 +15,8 @@ typedef int s32;
 typedef unsigned char u8;
 typedef unsigned int u32;
 
-#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
-# define BSWAP16(x)
-# define BSWAP32(x)
-#else
-# define BSWAP16(x) x = __builtin_bswap16(x)
-# define BSWAP32(x) x = __builtin_bswap32(x)
-#endif
+#define BSWAP16(x) x = __builtin_bswap16(x)
+#define BSWAP32(x) x = __builtin_bswap32(x)
 
 #define NORETURN __attribute__((noreturn))
 #define UNUSED __attribute__((unused))
@@ -45,14 +40,14 @@ void fail_parse(const char *fmt, ...)
     char *formatted = NULL;
     va_list ap;
     va_start(ap, fmt);
-    int size = vsprintf(NULL, fmt, ap);
+    int size = vsnprintf(NULL, 0, fmt, ap);
     va_end(ap);
     if (size >= 0) {
         size++;
         formatted = malloc(size);
         if (formatted != NULL) {
             va_start(ap, fmt);
-            size = vsprintf(formatted, fmt, ap);
+            size = vsnprintf(formatted, size, fmt, ap);
             va_end(ap);
             if (size < 0) {
                 free(formatted);

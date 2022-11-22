@@ -21,15 +21,18 @@
 #include "shape_helper.h"
 #include "skin.h"
 
-#include "config.h"
-#include "gfx_dimensions.h"
-
 #define MAX_GD_DLS 1000
 #define OS_MESG_SI_COMPLETE 0x33333333
 
+#ifndef NO_SEGMENTED_MEMORY
+#define GD_VIRTUAL_TO_PHYSICAL(addr) ((uintptr_t)(addr) &0x0FFFFFFF)
+#define GD_LOWER_24(addr) ((uintptr_t)(addr) &0x00FFFFFF)
+#define GD_LOWER_29(addr) (((uintptr_t)(addr)) & 0x1FFFFFFF)
+#else
 #define GD_VIRTUAL_TO_PHYSICAL(addr) (addr)
 #define GD_LOWER_24(addr) ((uintptr_t)(addr))
 #define GD_LOWER_29(addr) (((uintptr_t)(addr)))
+#endif
 
 #define MTX_INTPART_PACK(w1, w2) (((w1) &0xFFFF0000) | (((w2) >> 16) & 0xFFFF))
 #define MTX_FRACPART_PACK(w1, w2) ((((w1) << 16) & 0xFFFF0000) | ((w2) &0xFFFF))
@@ -492,7 +495,6 @@ ALIGNED8 static u8 gd_texture_sparkle_4[] = {
 
 //! No reference to this texture. Two DL's uses the same previous texture
 //  instead of using this texture.
-// Fixed via setting TEXTURE_FIX to 1.
 ALIGNED8 static u8 gd_texture_sparkle_5[] = {
 #include "textures/intro_raw/sparkle_5.rgba16.inc.c"
 };
@@ -569,22 +571,12 @@ static Gfx gd_dl_red_sparkle_4[] = {
     gsSPBranchList(gd_dl_sparkle),
 };
 
-#ifndef TEXTURE_FIX
 static Gfx gd_dl_red_sparkle_4_dup[] ={
     gsDPPipeSync(),
     gsSPDisplayList(gd_dl_sparkle_red_color),
     gsDPSetTextureImage(G_IM_FMT_RGBA, G_IM_SIZ_16b, 1, gd_texture_sparkle_4), // 4 again, correct texture would be 5
     gsSPBranchList(gd_dl_sparkle),
 };
-
-#else
-static Gfx gd_dl_red_sparkle_5[] ={
-    gsDPPipeSync(),
-    gsSPDisplayList(gd_dl_sparkle_red_color),
-    gsDPSetTextureImage(G_IM_FMT_RGBA, G_IM_SIZ_16b, 1, gd_texture_sparkle_5),
-    gsSPBranchList(gd_dl_sparkle),
-};
-#endif
 
 static Gfx gd_dl_silver_sparkle_0[] = {
     gsDPPipeSync(),
@@ -621,22 +613,12 @@ static Gfx gd_dl_silver_sparkle_4[] = {
     gsSPBranchList(gd_dl_sparkle),
 };
 
-#ifndef TEXTURE_FIX
 static Gfx gd_dl_silver_sparkle_4_dup[] = {
     gsDPPipeSync(),
     gsSPDisplayList(gd_dl_sparkle_white_color),
     gsDPSetTextureImage(G_IM_FMT_RGBA, G_IM_SIZ_16b, 1, gd_texture_sparkle_4), // 4 again, correct texture would be 5
     gsSPBranchList(gd_dl_sparkle),
 };
-
-#else
-static Gfx gd_dl_silver_sparkle_5[] = {
-    gsDPPipeSync(),
-    gsSPDisplayList(gd_dl_sparkle_white_color),
-    gsDPSetTextureImage(G_IM_FMT_RGBA, G_IM_SIZ_16b, 1, gd_texture_sparkle_5),
-    gsSPBranchList(gd_dl_sparkle),
-};
-#endif
 
 static Gfx *gd_red_sparkle_dl_array[] = {
     gd_dl_red_sparkle_4,
@@ -649,13 +631,8 @@ static Gfx *gd_red_sparkle_dl_array[] = {
     gd_dl_red_sparkle_1,
     gd_dl_red_sparkle_0,
     gd_dl_red_sparkle_0,
-#ifndef TEXTURE_FIX
     gd_dl_red_sparkle_4_dup,
     gd_dl_red_sparkle_4_dup,
-#else
-    gd_dl_red_sparkle_5,
-    gd_dl_red_sparkle_5,
-#endif
 };
 
 static Gfx *gd_silver_sparkle_dl_array[] = {
@@ -669,13 +646,8 @@ static Gfx *gd_silver_sparkle_dl_array[] = {
     gd_dl_silver_sparkle_1,
     gd_dl_silver_sparkle_0,
     gd_dl_silver_sparkle_0,
-#ifndef TEXTURE_FIX
     gd_dl_silver_sparkle_4_dup,
     gd_dl_silver_sparkle_4_dup,
-#else
-    gd_dl_silver_sparkle_5,
-    gd_dl_silver_sparkle_5,
-#endif
 };
 
 static Gfx gd_texture3_dummy_aligner1[] = {
@@ -1716,7 +1688,27 @@ u32 Unknown8019EC88(Gfx *dl, UNUSED s32 arg1) {
 
 /* 24D4C4 -> 24D63C; orig name: func_8019ECF4 */
 void mat4_to_mtx(Mat4f *src, Mtx *dst) {
+#ifndef GBI_FLOATS
+    s32 i; // 14
+    s32 j; // 10
+    s32 w1;
+    s32 w2;
+    s32 *mtxInt = (s32 *) dst->m[0]; // s32 part
+    s32 *mtxFrc = (s32 *) dst->m[2]; // frac part
+
+    for (i = 0; i < 4; i++) {
+        for (j = 0; j < 2; j++) {
+            w1 = (s32)((*src)[i][j * 2] * 65536.0f);
+            w2 = (s32)((*src)[i][j * 2 + 1] * 65536.0f);
+            *mtxInt = MTX_INTPART_PACK(w1, w2);
+            mtxInt++;
+            *mtxFrc = MTX_FRACPART_PACK(w1, w2);
+            mtxFrc++;
+        }
+    }
+#else
     guMtxF2L(*src, dst);
+#endif
 }
 
 /* 24D63C -> 24D6E4; orig name: func_8019EE6C */
@@ -2330,7 +2322,9 @@ void start_view_dl(struct ObjView *view) {
         uly = lry - 1.0f;
     }
 
-    // gDPSetScissor(next_gfx(), G_SC_NON_INTERLACE, ulx, uly, lrx, lry); // N64 only
+#ifdef TARGET_N64
+    gDPSetScissor(next_gfx(), G_SC_NON_INTERLACE, ulx, uly, lrx, lry);
+#endif
     gSPClearGeometryMode(next_gfx(), 0xFFFFFFFF);
     gSPSetGeometryMode(next_gfx(), G_LIGHTING | G_CULL_BACK | G_SHADING_SMOOTH | G_SHADE);
     if (view->flags & VIEW_ALLOC_ZBUF) {
@@ -2349,9 +2343,7 @@ void parse_p1_controller(void) {
     OSContPad *p1contPrev;    // 30
     u8 *gdCtrlBytes;          // 2C
     u8 *prevGdCtrlBytes;      // 28
-    f32 aspect = GFX_DIMENSIONS_ASPECT_RATIO;
-    aspect *= 0.75;
-	
+
     gdctrl = &gGdCtrl;
     gdCtrlBytes = (u8 *) gdctrl;
     prevGdCtrlBytes = (u8 *) gdctrl->prevFrame;
@@ -2448,14 +2440,14 @@ void parse_p1_controller(void) {
         gdctrl->csrY -= gdctrl->stickY * 0.1; //? 0.1f
     }
     // border checks? is this for the cursor finger movement?
-    if ((f32) gdctrl->csrX < (sScreenView2->parent->upperLeft.x + (16.0f/aspect))) {
-        gdctrl->csrX = (s32)(sScreenView2->parent->upperLeft.x + (16.0f/aspect));
+    if ((f32) gdctrl->csrX < (sScreenView2->parent->upperLeft.x + 16.0f)) {
+        gdctrl->csrX = (s32)(sScreenView2->parent->upperLeft.x + 16.0f);
     }
 
     if ((f32) gdctrl->csrX
-        > (sScreenView2->parent->upperLeft.x + sScreenView2->parent->lowerRight.x - (48.0/aspect))) {
+        > (sScreenView2->parent->upperLeft.x + sScreenView2->parent->lowerRight.x - 48.0f)) {
         gdctrl->csrX =
-            (s32)(sScreenView2->parent->upperLeft.x + sScreenView2->parent->lowerRight.x - (48.0/aspect));
+            (s32)(sScreenView2->parent->upperLeft.x + sScreenView2->parent->lowerRight.x - 48.0f);
     }
 
     if ((f32) gdctrl->csrY < (sScreenView2->parent->upperLeft.y + 16.0f)) {
@@ -2989,9 +2981,9 @@ void update_cursor(void) {
     reset_dlnum_indices(sHandShape->gdDls[gGdFrameBuf]);
 
     if (gGdCtrl.btnApressed) {
-        gd_put_sprite((u16 *) gd_texture_hand_closed, sHandView->upperLeft.x, sHandView->upperLeft.y, 32, 32);
+        gd_put_sprite((u16 *) gd_texture_hand_closed, sHandView->upperLeft.x, sHandView->upperLeft.y, 0x20, 0x20);
     } else {
-        gd_put_sprite((u16 *) gd_texture_hand_open, sHandView->upperLeft.x, sHandView->upperLeft.y, 32, 32);
+        gd_put_sprite((u16 *) gd_texture_hand_open, sHandView->upperLeft.x, sHandView->upperLeft.y, 0x20, 0x20);
     }
     gd_enddlsplist_parent();
 
@@ -3443,14 +3435,10 @@ void Unknown801A5FF8(struct ObjGroup *arg0) {
 }
 
 /* 254AC0 -> 254DFC; orig name: PutSprite */
-// thanks to gamemasterplc again for fixing this
 void gd_put_sprite(u16 *sprite, s32 x, s32 y, s32 wx, s32 wy) {
     s32 c; // 5c
     s32 r; // 58
-    // Must be game screen aspect ratio, not GFX window aspect ratio
-    f32 aspect = ((float) SCREEN_WIDTH) / ((float) SCREEN_HEIGHT ) * 0.75;
-    x *= aspect;
-    
+
     gSPDisplayList(next_gfx(), osVirtualToPhysical(gd_dl_sprite_start_tex_block));
     for (r = 0; r < wy; r += 32) {
         for (c = 0; c < wx; c += 32) {
@@ -3637,9 +3625,89 @@ void Unknown801A6E30(UNUSED u32 a0) {
 void Unknown801A6E44(UNUSED u32 a0) {
 }
 
+#ifndef NO_SEGMENTED_MEMORY
+/* 255628 -> 255704; orig name: func_801A6E58 */
+void gd_block_dma(u32 devAddr, void *vAddr, s32 size) {
+    s32 transfer; // 2c
+
+    do {
+        if ((transfer = size) > 0x1000) {
+            transfer = 0x1000;
+        }
+
+        osPiStartDma(&D_801BE980, OS_MESG_PRI_NORMAL, OS_READ, devAddr, vAddr, transfer, &sGdDMAQueue);
+        osRecvMesg(&sGdDMAQueue, &D_801BE97C, OS_MESG_BLOCK);
+        devAddr += transfer;
+        vAddr = (void *) ((uintptr_t) vAddr + transfer);
+        size -= 0x1000;
+    } while (size > 0);
+}
+
+/* 255704 -> 255988 */
+struct GdObj *load_dynlist(struct DynList *dynlist) {
+    u32 segSize;               // 4c
+    u8 *allocSegSpace;         // 48
+    void *allocPtr;            // 44
+    uintptr_t dynlistSegStart; // 40
+    uintptr_t dynlistSegEnd;   // 3c
+    s32 i;                     // 38
+    s32 sp34;                  // tlbPage
+    struct GdObj *loadedList;  // 30
+
+    i = -1;
+
+    while (sDynLists[++i].list != NULL) {
+        if (sDynLists[i].list == dynlist) {
+            break;
+        }
+    }
+
+    if (sDynLists[i].list == NULL) {
+        fatal_printf("load_dynlist() ptr not found in any banks");
+    }
+
+    switch (sDynLists[i].flag) {
+        case STD_LIST_BANK:
+            dynlistSegStart = (uintptr_t) _gd_dynlistsSegmentRomStart;
+            dynlistSegEnd = (uintptr_t) _gd_dynlistsSegmentRomEnd;
+            break;
+        default:
+            fatal_printf("load_dynlist() unkown bank");
+    }
+
+    segSize = dynlistSegEnd - dynlistSegStart;
+    allocSegSpace = gd_malloc_temp(segSize + 0x10000);
+
+    if ((allocPtr = (void *) allocSegSpace) == NULL) {
+        fatal_printf("Not enough DRAM for DATA segment \n");
+    }
+
+    allocSegSpace = (u8 *) (((uintptr_t) allocSegSpace + 0x10000) & 0xFFFF0000);
+    gd_block_dma(dynlistSegStart, (void *) allocSegSpace, segSize);
+    osUnmapTLBAll();
+
+    sp34 = (segSize / 0x10000) / 2 + 1; //? has to be written this way
+    if (sp34 >= 31) {
+        fatal_printf("load_dynlist() too many TLBs");
+    }
+
+    for (i = 0; i < sp34; i++) {
+        osMapTLB(i, OS_PM_64K, (void *) (uintptr_t) (0x04000000 + (i * 2 * 0x10000)),
+                 GD_LOWER_24(((uintptr_t) allocSegSpace) + (i * 2 * 0x10000)),
+                 GD_LOWER_24(((uintptr_t) allocSegSpace) + (i * 2 * 0x10000) + 0x10000), -1);
+    }
+
+    loadedList = proc_dynlist(dynlist);
+    gd_free(allocPtr);
+    osUnmapTLBAll();
+
+    return loadedList;
+}
+#else
 struct GdObj *load_dynlist(struct DynList *dynlist) {
     return proc_dynlist(dynlist);
 }
+#endif
 
 /* 255988 -> 25599C */
 void stub_801A71B8(UNUSED u32 a0) {

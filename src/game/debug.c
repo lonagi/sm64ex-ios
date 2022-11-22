@@ -392,7 +392,7 @@ static void try_change_debug_page(void) {
  * sDebugSysCursor. This is used to adjust enemy and effect behaviors
  * on the fly. (unused)
  */
-#ifdef VERSION_SH
+#ifndef VERSION_SH
 static
 #endif
 void try_modify_debug_controls(void) {
@@ -525,7 +525,7 @@ void try_do_mario_debug_object_spawn(void) {
 }
 
 // TODO: figure out what this is
-#ifdef VERSION_SH
+#ifndef VERSION_SH
 static
 #endif
 void debug_print_obj_move_flags(void) {
@@ -554,7 +554,7 @@ void debug_print_obj_move_flags(void) {
     if (gCurrentObject->oMoveFlags & OBJ_MOVE_IN_AIR) {
         print_debug_top_down_objectinfo("SKY     %x", gCurrentObject->oMoveFlags);
     }
-    if (gCurrentObject->oMoveFlags & OBJ_MOVE_OUT_SCOPE) {
+    if (gCurrentObject->oMoveFlags & OBJ_MOVE_8) {
         print_debug_top_down_objectinfo("OUT SCOPE %x", gCurrentObject->oMoveFlags);
     }
 #endif

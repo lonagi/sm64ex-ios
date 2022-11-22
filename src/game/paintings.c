@@ -1063,6 +1063,7 @@ void reset_painting(struct Painting *painting) {
 
     gRipplingPainting = NULL;
 
+#ifdef NO_SEGMENTED_MEMORY
     // Make sure all variables are reset correctly.
     // With segmented memory the segments that contain the relevant
     // Painting structs are reloaded from ROM upon level load.
@@ -1079,6 +1080,7 @@ void reset_painting(struct Painting *painting) {
         // that moves the painting stops during level unload.
         painting->posX = 3456.0f;
     }
+#endif
 }
 
 /**
@@ -1126,6 +1128,7 @@ void move_ddd_painting(struct Painting *painting, f32 frontPos, f32 backPos, f32
         gDddPaintingStatus = BOWSERS_SUB_BEATEN | DDD_BACK;
     }
 }
+
 /**
  * Set the painting's node's layer based on its alpha
  */

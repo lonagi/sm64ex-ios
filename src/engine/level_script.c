@@ -1,5 +1,7 @@
 #include <ultra64.h>
+#ifdef NO_SEGMENTED_MEMORY
 #include <string.h>
+#endif
 
 #include "sm64.h"
 #include "audio/external.h"
@@ -22,7 +24,6 @@
 #include "math_util.h"
 #include "surface_collision.h"
 #include "surface_load.h"
-#include "level_table.h"
 
 #define CMD_GET(type, offset) (*(type *) (CMD_PROCESS_OFFSET(offset) + (u8 *) sCurrentCmd))
 
@@ -601,6 +602,9 @@ static void level_cmd_set_gamma(void) {
 
 static void level_cmd_set_terrain_data(void) {
     if (sCurrAreaIndex != -1) {
+#ifndef NO_SEGMENTED_MEMORY
+        gAreas[sCurrAreaIndex].terrainData = segmented_to_virtual(CMD_GET(void *, 4));
+#else
         Collision *data;
         u32 size;
 
@@ -609,6 +613,7 @@ static void level_cmd_set_terrain_data(void) {
         size = get_area_terrain_size(data) * sizeof(Collision);
         gAreas[sCurrAreaIndex].terrainData = alloc_only_pool_alloc(sLevelPool, size);
         memcpy(gAreas[sCurrAreaIndex].terrainData, data, size);
+#endif
     }
     sCurrentCmd = CMD_NEXT;
 }
@@ -622,6 +627,9 @@ static void level_cmd_set_rooms(void) {
 
 static void level_cmd_set_macro_objects(void) {
     if (sCurrAreaIndex != -1) {
+#ifndef NO_SEGMENTED_MEMORY
+        gAreas[sCurrAreaIndex].macroObjects = segmented_to_virtual(CMD_GET(void *, 4));
+#else
         // The game modifies the macro object data (for example marking coins as taken),
         // so it must be reset when the level reloads.
         MacroObject *data = segmented_to_virtual(CMD_GET(void *, 4));
@@ -631,6 +639,7 @@ static void level_cmd_set_macro_objects(void) {
         }
         gAreas[sCurrAreaIndex].macroObjects = alloc_only_pool_alloc(sLevelPool, len * sizeof(MacroObject));
         memcpy(gAreas[sCurrAreaIndex].macroObjects, data, len * sizeof(MacroObject));
+#endif
     }
     sCurrentCmd = CMD_NEXT;
 }
@@ -711,8 +720,6 @@ static void level_cmd_38(void) {
     sCurrentCmd = CMD_NEXT;
 }
 
-extern int gPressedStart;
-
 static void level_cmd_get_or_set_var(void) {
     if (CMD_GET(u8, 2) == 0) {
         switch (CMD_GET(u8, 3)) {
@@ -730,9 +737,6 @@ static void level_cmd_get_or_set_var(void) {
                 break;
             case 4:
                 gCurrAreaIndex = sRegister;
-                break;
-            case 5: 
-                gPressedStart = sRegister; 
                 break;
         }
     } else {
@@ -752,45 +756,9 @@ static void level_cmd_get_or_set_var(void) {
             case 4:
                 sRegister = gCurrAreaIndex;
                 break;
-            case 5: 
-                sRegister = gPressedStart; 
-                break;
         }
     }
 
-    sCurrentCmd = CMD_NEXT;
-}
-
-int gDemoLevels[7] = {
-    LEVEL_BOWSER_1,
-    LEVEL_WF,
-    LEVEL_CCM,
-    LEVEL_BBH,
-    LEVEL_JRB,
-    LEVEL_HMC,
-    LEVEL_PSS
-};
-
-int gDemoLevelID = 0;
-int gDemoInputListID_2 = 0;
-
-extern int start_demo(int);
-
-static void level_cmd_advdemo(void)
-{
-    start_demo(0);
-    if(gDemoLevelID == 6) {
-        sRegister = gDemoLevels[6];
-        gDemoLevelID = 0;
-    } else {
-        sRegister = gDemoLevels[gDemoLevelID++];
-    }
-    sCurrentCmd = CMD_NEXT;
-}
-
-static void level_cmd_cleardemoptr(void)
-{
-    gCurrDemoInput = NULL;
     sCurrentCmd = CMD_NEXT;
 }
 
@@ -856,11 +824,7 @@ static void (*LevelScriptJumpTable[])(void) = {
     /*3A*/ level_cmd_3A,
     /*3B*/ level_cmd_create_whirlpool,
     /*3C*/ level_cmd_get_or_set_var,
-    /*3D*/ level_cmd_advdemo,
-    /*3E*/ level_cmd_cleardemoptr,
 };
-
-extern void render_touch_controls(void);
 
 struct LevelCommand *level_script_execute(struct LevelCommand *cmd) {
     sScriptStatus = SCRIPT_RUNNING;
@@ -873,9 +837,6 @@ struct LevelCommand *level_script_execute(struct LevelCommand *cmd) {
     profiler_log_thread5_time(LEVEL_SCRIPT_EXECUTE);
     init_render_image();
     render_game();
-#ifdef TARGET_OS_IOS
-    render_touch_controls();
-#endif
     end_master_display_list();
     alloc_display_list(0);
 

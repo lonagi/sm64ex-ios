@@ -22,8 +22,6 @@
 #include "save_file.h"
 #include "level_table.h"
 
-#include "gfx_dimensions.h"
-
 struct SpawnInfo gPlayerSpawnInfos[1];
 struct GraphNode *D_8033A160[0x100];
 struct Area gAreaData[8];
@@ -108,11 +106,6 @@ void set_warp_transition_rgb(u8 red, u8 green, u8 blue) {
     gWarpTransBlue = blue;
 }
 
-static int scale_x_to_correct_aspect_center(int x) {
-    f32 aspect = GFX_DIMENSIONS_ASPECT_RATIO;
-    return x + (SCREEN_HEIGHT * aspect / 2) - (SCREEN_WIDTH / 2);
-}
-
 void print_intro_text(void) {
 #ifdef VERSION_EU
     int language = eu_get_language();
@@ -122,7 +115,7 @@ void print_intro_text(void) {
 #ifdef VERSION_EU
             print_text_centered(SCREEN_WIDTH / 2, 20, gNoControllerMsg[language]);
 #else
-            print_text_centered(scale_x_to_correct_aspect_center(SCREEN_WIDTH / 2), 20, "NO CONTROLLER");
+            print_text_centered(SCREEN_WIDTH / 2, 20, "NO CONTROLLER");
 #endif
         } else {
 #ifdef VERSION_EU

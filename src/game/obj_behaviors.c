@@ -15,7 +15,6 @@
 #include "game_init.h"
 #include "ingame_menu.h"
 #include "interaction.h"
-#include "level_misc_macros.h"
 #include "level_table.h"
 #include "level_update.h"
 #include "levels/bob/header.h"
@@ -236,7 +235,7 @@ void obj_orient_graph(struct Object *obj, f32 normalX, f32 normalY, f32 normalZ)
     surfaceNormals[2] = normalZ;
 
     mtxf_align_terrain_normal(*throwMatrix, surfaceNormals, objVisualPosition, obj->oFaceAngleYaw);
-    obj->header.gfx.throwMatrix = throwMatrix;
+    obj->header.gfx.throwMatrix = (void *) throwMatrix;
 }
 
 /**
@@ -530,15 +529,11 @@ void set_object_visibility(struct Object *obj, s32 dist) {
     f32 objY = obj->oPosY;
     f32 objZ = obj->oPosZ;
 
-#ifndef NODRAWINGDISTANCE
     if (is_point_within_radius_of_mario(objX, objY, objZ, dist) == TRUE) {
-#endif
         obj->header.gfx.node.flags &= ~GRAPH_RENDER_INVISIBLE;
-#ifndef NODRAWINGDISTANCE
     } else {
         obj->header.gfx.node.flags |= GRAPH_RENDER_INVISIBLE;
     }
-#endif
 }
 
 /**

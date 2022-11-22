@@ -1,4 +1,4 @@
-#ifdef RAPI_D3D11
+#ifdef ENABLE_DX11
 
 #include <cstdio>
 #include <vector>
@@ -191,17 +191,14 @@ static void gfx_d3d11_init(void) {
     // Load d3d11.dll
     d3d.d3d11_module = LoadLibraryW(L"d3d11.dll");
     if (d3d.d3d11_module == nullptr) {
-        ThrowIfFailed(HRESULT_FROM_WIN32(GetLastError()), gfx_dxgi_get_h_wnd(), "d3d11.dll could not be loaded");
+        ThrowIfFailed(HRESULT_FROM_WIN32(GetLastError()), gfx_dxgi_get_h_wnd(), "d3d11.dll not found");
     }
     d3d.D3D11CreateDevice = (PFN_D3D11_CREATE_DEVICE)GetProcAddress(d3d.d3d11_module, "D3D11CreateDevice");
 
-    // Load D3DCompiler_47.dll or D3DCompiler_43.dll
+    // Load D3DCompiler_47.dll
     d3d.d3dcompiler_module = LoadLibraryW(L"D3DCompiler_47.dll");
     if (d3d.d3dcompiler_module == nullptr) {
-        d3d.d3dcompiler_module = LoadLibraryW(L"D3DCompiler_43.dll");
-        if (d3d.d3dcompiler_module == nullptr) {
-            ThrowIfFailed(HRESULT_FROM_WIN32(GetLastError()), gfx_dxgi_get_h_wnd(), "D3DCompiler_47.dll or D3DCompiler_43.dll could not be loaded");
-        }
+        ThrowIfFailed(HRESULT_FROM_WIN32(GetLastError()), gfx_dxgi_get_h_wnd(), "D3DCompiler_47.dll not found");
     }
     d3d.D3DCompile = (pD3DCompile)GetProcAddress(d3d.d3dcompiler_module, "D3DCompile");
 
@@ -684,9 +681,9 @@ static void gfx_d3d11_start_frame(void) {
         // No high values, as noise starts to look ugly
         d3d.per_frame_cb_data.noise_frame = 0;
     }
-
-    d3d.per_frame_cb_data.noise_scale_x = (float) d3d.current_width;
-    d3d.per_frame_cb_data.noise_scale_y = (float) d3d.current_height;
+    float aspect_ratio = (float) d3d.current_width / (float) d3d.current_height;
+    d3d.per_frame_cb_data.noise_scale_x = 120 * aspect_ratio; // 120 = N64 height resolution (240) / 2
+    d3d.per_frame_cb_data.noise_scale_y = 120;
 
     D3D11_MAPPED_SUBRESOURCE ms;
     ZeroMemory(&ms, sizeof(D3D11_MAPPED_SUBRESOURCE));

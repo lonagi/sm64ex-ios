@@ -1,5 +1,4 @@
 #include <ultra64.h>
-#include <stdbool.h>
 
 #include "sm64.h"
 #include "seq_ids.h"
@@ -29,11 +28,6 @@
 #include "level_table.h"
 #include "course_table.h"
 #include "thread6.h"
-#include "../../include/libc/stdlib.h"
-
-#include "pc/pc_main.h"
-#include "pc/cliopts.h"
-#include "pc/configfile.h"
 
 #define PLAY_MODE_NORMAL 0
 #define PLAY_MODE_PAUSED 2
@@ -178,6 +172,7 @@ u8 unused1[4] = { 0 };
 s8 D_8032C9E0 = 0;
 u8 unused3[4];
 u8 unused4[2];
+
 
 u16 level_control_timer(s32 timerOp) {
     switch (timerOp) {
@@ -683,8 +678,10 @@ void initiate_painting_warp(void) {
 
                 play_sound(SOUND_MENU_STAR_SOUND, gDefaultSoundArgs);
                 fadeout_music(398);
+#ifdef VERSION_SH
                 queue_rumble_data(80, 70);
                 func_sh_8024C89C(1);
+#endif
             }
         }
     }
@@ -958,8 +955,6 @@ void basic_update(UNUSED s16 *arg) {
     }
 }
 
-int gPressedStart = 0;
-
 s32 play_mode_normal(void) {
     if (gCurrDemoInput != NULL) {
         print_intro_text();
@@ -968,7 +963,6 @@ s32 play_mode_normal(void) {
                                gCurrLevelNum == LEVEL_PSS ? WARP_OP_DEMO_END : WARP_OP_DEMO_NEXT);
         } else if (!gWarpTransition.isActive && sDelayedWarpOp == WARP_OP_NONE
                    && (gPlayer1Controller->buttonPressed & START_BUTTON)) {
-            gPressedStart = 1;
             level_trigger_warp(gMarioState, WARP_OP_DEMO_NEXT);
         }
     }
@@ -999,7 +993,9 @@ s32 play_mode_normal(void) {
             set_play_mode(PLAY_MODE_CHANGE_AREA);
         } else if (pressed_pause()) {
             lower_background_noise(1);
+#ifdef VERSION_SH
             cancel_rumble();
+#endif
             gCameraMovementFlags |= CAM_MOVE_PAUSE_SCREEN;
             set_play_mode(PLAY_MODE_PAUSED);
         }
@@ -1015,8 +1011,9 @@ s32 play_mode_paused(void) {
         raise_background_noise(1);
         gCameraMovementFlags &= ~CAM_MOVE_PAUSE_SCREEN;
         set_play_mode(PLAY_MODE_NORMAL);
-    } else if (gPauseScreenMode == 2) {
+    } else {
         // Exit level
+
         if (gDebugLevelSelect) {
             fade_into_special_warp(-9, 1);
         } else {
@@ -1024,14 +1021,9 @@ s32 play_mode_paused(void) {
             fade_into_special_warp(0, 0);
             gSavedCourseNum = COURSE_NONE;
         }
-    } else if (gPauseScreenMode == 3) {
-        // We should only be getting "int 3" to here
-        initiate_warp(LEVEL_CASTLE, 1, 0x1F, 0);
-        fade_into_special_warp(0, 0);
-        game_exit();
-    }
 
-    gCameraMovementFlags &= ~CAM_MOVE_PAUSE_SCREEN;
+        gCameraMovementFlags &= ~CAM_MOVE_PAUSE_SCREEN;
+    }
 
     return 0;
 }
@@ -1198,7 +1190,7 @@ s32 init_level(void) {
                 if (gMarioState->action != ACT_UNINITIALIZED) {
                     if (save_file_exists(gCurrSaveFileNum - 1)) {
                         set_mario_action(gMarioState, ACT_IDLE, 0);
-                    } else if (gCLIOpts.SkipIntro == 0 && configSkipIntro == 0) {
+                    } else {
                         set_mario_action(gMarioState, ACT_INTRO_CUTSCENE, 0);
                         val4 = 1;
                     }
@@ -1216,10 +1208,11 @@ s32 init_level(void) {
             set_background_music(gCurrentArea->musicParam, gCurrentArea->musicParam2, 0);
         }
     }
-    
+#ifdef VERSION_SH
     if (gCurrDemoInput == NULL) {
         cancel_rumble();
     }
+#endif
 
     if (gMarioState->action == ACT_INTRO_CUTSCENE) {
         sound_banks_disable(2, 0x0330);
@@ -1266,7 +1259,7 @@ s32 lvl_init_from_save_file(UNUSED s16 arg0, s32 levelNum) {
 #endif
     sWarpDest.type = WARP_TYPE_NOT_WARPING;
     sDelayedWarpOp = WARP_OP_NONE;
-    gShouldNotPlayCastleMusic = !save_file_exists(gCurrSaveFileNum - 1) && gCLIOpts.SkipIntro == 0 && configSkipIntro == 0;
+    gShouldNotPlayCastleMusic = !save_file_exists(gCurrSaveFileNum - 1);
 
     gCurrLevelNum = levelNum;
     gCurrCourseNum = COURSE_NONE;

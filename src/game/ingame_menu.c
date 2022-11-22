@@ -22,14 +22,6 @@
 #include "sm64.h"
 #include "text_strings.h"
 #include "types.h"
-#include "macros.h"
-#include "pc/cheats.h"
-#ifdef BETTERCAMERA
-#include "bettercamera.h"
-#endif
-#ifdef EXT_OPTIONS_MENU
-#include "options_menu.h"
-#endif
 
 u16 gDialogColorFadeTimer;
 s8 gLastDialogLineNum;
@@ -119,16 +111,6 @@ u8 gMenuHoldKeyIndex = 0;
 u8 gMenuHoldKeyTimer = 0;
 s32 gDialogResponse = 0;
 
-#if !defined(EXTERNAL_DATA) && (defined(VERSION_JP) || defined(VERSION_SH) || defined(VERSION_EU))
-#ifdef VERSION_EU
-#define CHCACHE_BUFLEN (8 * 8)  // EU only converts 8x8
-#else
-#define CHCACHE_BUFLEN (8 * 16) // JP only converts 8x16 or 16x8 characters
-#endif
-// stores char data unpacked from ia1 to ia8 or ia4
-// so that it won't be reconverted every time a character is rendered
-static struct CachedChar { u8 used; u8 data[CHCACHE_BUFLEN]; } charCache[256];
-#endif // VERSION
 
 void create_dl_identity_matrix(void) {
     Mtx *matrix = (Mtx *) alloc_display_list(sizeof(Mtx));
@@ -137,7 +119,14 @@ void create_dl_identity_matrix(void) {
         return;
     }
 
+#ifndef GBI_FLOATS
+    matrix->m[0][0] = 0x00010000;    matrix->m[1][0] = 0x00000000;    matrix->m[2][0] = 0x00000000;    matrix->m[3][0] = 0x00000000;
+    matrix->m[0][1] = 0x00000000;    matrix->m[1][1] = 0x00010000;    matrix->m[2][1] = 0x00000000;    matrix->m[3][1] = 0x00000000;
+    matrix->m[0][2] = 0x00000001;    matrix->m[1][2] = 0x00000000;    matrix->m[2][2] = 0x00000000;    matrix->m[3][2] = 0x00000000;
+    matrix->m[0][3] = 0x00000000;    matrix->m[1][3] = 0x00000001;    matrix->m[2][3] = 0x00000000;    matrix->m[3][3] = 0x00000000;
+#else
     guMtxIdent(matrix);
+#endif
 
     gSPMatrix(gDisplayListHead++, VIRTUAL_TO_PHYSICAL(matrix), G_MTX_MODELVIEW | G_MTX_LOAD | G_MTX_NOPUSH);
     gSPMatrix(gDisplayListHead++, VIRTUAL_TO_PHYSICAL(matrix), G_MTX_PROJECTION | G_MTX_LOAD | G_MTX_NOPUSH);
@@ -208,19 +197,23 @@ void create_dl_ortho_matrix(void) {
     gSPMatrix(gDisplayListHead++, VIRTUAL_TO_PHYSICAL(matrix), G_MTX_PROJECTION | G_MTX_MUL | G_MTX_NOPUSH)
 }
 
-#if defined(VERSION_JP) || defined(VERSION_SH)
-static inline void alloc_ia8_text_from_i1(u8 *out, u16 *in, s16 width, s16 height) {
+static u8 *alloc_ia8_text_from_i1(u16 *in, s16 width, s16 height) {
     s32 inPos;
     u16 bitMask;
-    u16 inWord;
+    u8 *out;
     s16 outPos = 0;
 
+    out = alloc_display_list((u32) width * (u32) height);
+
+    if (out == NULL) {
+        return NULL;
+    }
+
     for (inPos = 0; inPos < (width * height) / 16; inPos++) {
-        inWord = BE_TO_HOST16(in[inPos]);
         bitMask = 0x8000;
 
         while (bitMask != 0) {
-            if (inWord & bitMask) {
+            if (in[inPos] & bitMask) {
                 out[outPos] = 0xFF;
             } else {
                 out[outPos] = 0x00;
@@ -230,21 +223,9 @@ static inline void alloc_ia8_text_from_i1(u8 *out, u16 *in, s16 width, s16 heigh
             outPos++;
         }
     }
-}
 
-static inline u8 *convert_ia8_char(u8 c, u16 *tex, s16 w, s16 h) {
-#ifdef EXTERNAL_DATA
-    return (u8 *)tex; // the data's just a name
-#else
-    if (!tex) return NULL;
-    if (!charCache[c].used) {
-        charCache[c].used = 1;
-        alloc_ia8_text_from_i1(charCache[c].data, tex, w, h);
-    }
-    return charCache[c].data;
-#endif
+    return out;
 }
-#endif
 
 void render_generic_char(u8 c) {
     void **fontLUT;
@@ -257,7 +238,7 @@ void render_generic_char(u8 c) {
     packedTexture = segmented_to_virtual(fontLUT[c]);
 
 #if defined(VERSION_JP) || defined(VERSION_SH)
-    unpackedTexture = convert_ia8_char(c, packedTexture, 8, 16);
+    unpackedTexture = alloc_ia8_text_from_i1(packedTexture, 8, 16);
 
     gDPPipeSync(gDisplayListHead++);
     gDPSetTextureImage(gDisplayListHead++, G_IM_FMT_IA, G_IM_SIZ_8b, 1, VIRTUAL_TO_PHYSICAL(unpackedTexture));
@@ -275,11 +256,19 @@ void render_generic_char(u8 c) {
 }
 
 #ifdef VERSION_EU
-static void alloc_ia4_tex_from_i1(u8 *out, u8 *in, s16 width, s16 height) {
+u8 *alloc_ia4_tex_from_i1(u8 *in, s16 width, s16 height) {
     u32 size = (u32) width * (u32) height;
+    u8 *out;
     s32 inPos;
-    s16 outPos = 0;
+    s16 outPos;
     u8 bitMask;
+
+    outPos = 0;
+    out = (u8 *) alloc_display_list(size);
+
+    if (out == NULL) {
+        return NULL;
+    }
 
     for (inPos = 0; inPos < (width * height) / 4; inPos++) {
         bitMask = 0x80;
@@ -291,19 +280,8 @@ static void alloc_ia4_tex_from_i1(u8 *out, u8 *in, s16 width, s16 height) {
             outPos++;
         }
     }
-}
 
-static u8 *convert_ia4_char(u8 c, u8 *tex, s16 w, s16 h) {
-#ifdef EXTERNAL_DATA
-    return tex; // the data's just a name
-#else
-    if (!tex) return NULL;
-    if (!charCache[c].used) {
-        charCache[c].used = 1;
-        alloc_ia4_tex_from_i1(charCache[c].data, tex, w, h);
-    }
-    return charCache[c].data;
-#endif
+    return out;
 }
 
 void render_generic_char_at_pos(s16 xPos, s16 yPos, u8 c) {
@@ -313,7 +291,7 @@ void render_generic_char_at_pos(s16 xPos, s16 yPos, u8 c) {
 
     fontLUT = segmented_to_virtual(main_font_lut);
     packedTexture = segmented_to_virtual(fontLUT[c]);
-    unpackedTexture = convert_ia4_char(c, packedTexture, 8, 8);
+    unpackedTexture = alloc_ia4_tex_from_i1(packedTexture, 8, 8);
 
     gDPPipeSync(gDisplayListHead++);
     gDPSetTextureImage(gDisplayListHead++, G_IM_FMT_IA, G_IM_SIZ_16b, 1, VIRTUAL_TO_PHYSICAL(unpackedTexture));
@@ -1038,7 +1016,7 @@ void render_generic_dialog_char_at_pos(struct DialogEntry *dialog, s16 x, s16 y,
 
     fontLUT = segmented_to_virtual(main_font_lut);
     packedTexture = segmented_to_virtual(fontLUT[c]);
-    unpackedTexture = convert_ia4_char(c, packedTexture, 8, 8);
+    unpackedTexture = alloc_ia4_tex_from_i1(packedTexture, 8, 8);
 
     gDPSetTextureImage(gDisplayListHead++, G_IM_FMT_IA, G_IM_SIZ_16b, 1, VIRTUAL_TO_PHYSICAL(unpackedTexture));
     gSPDisplayList(gDisplayListHead++, dl_ia_text_tex_settings);
@@ -1812,13 +1790,26 @@ void render_dialog_entries(void) {
     render_dialog_box_type(dialog, dialog->linesPerBox);
 
     gDPSetScissor(gDisplayListHead++, G_SC_NON_INTERLACE,
+                  // Horizontal scissoring isn't really required and can potentially mess up widescreen enhancements.
+#ifdef WIDESCREEN
                   0,
+#else
+                  ensure_nonnegative(dialog->leftOffset),
+#endif
                   ensure_nonnegative(DIAG_VAL2 - dialog->width),
 #ifdef VERSION_EU
+#ifdef WIDESCREEN
                   SCREEN_WIDTH,
+#else
+                  ensure_nonnegative(dialog->leftOffset + DIAG_VAL3 / gDialogBoxScale),
+#endif
                   ensure_nonnegative((240 - dialog->width) + ((dialog->linesPerBox * 80) / DIAG_VAL4) / gDialogBoxScale));
 #else
+#ifdef WIDESCREEN
                   SCREEN_WIDTH,
+#else
+                  ensure_nonnegative(DIAG_VAL3 + dialog->leftOffset),
+#endif
                   ensure_nonnegative(240 + ((dialog->linesPerBox * 80) / DIAG_VAL4) - dialog->width));
 #endif
 #if defined(VERSION_JP) || defined(VERSION_SH)
@@ -2123,13 +2114,16 @@ void change_dialog_camera_angle(void) {
 }
 
 void shade_screen(void) {
-    create_dl_translation_matrix(MENU_MTX_PUSH, GFX_DIMENSIONS_FROM_LEFT_EDGE(0), 240.0f, 0);
+    create_dl_translation_matrix(MENU_MTX_PUSH, GFX_DIMENSIONS_FROM_LEFT_EDGE(0), SCREEN_HEIGHT, 0);
 
     // This is a bit weird. It reuses the dialog text box (width 130, height -80),
     // so scale to at least fit the screen.
-
+#ifndef WIDESCREEN
+    create_dl_scale_matrix(MENU_MTX_NOPUSH, 2.6f, 3.4f, 1.0f);
+#else
     create_dl_scale_matrix(MENU_MTX_NOPUSH,
                            GFX_DIMENSIONS_ASPECT_RATIO * SCREEN_HEIGHT / 130.0f, 3.0f, 1.0f);
+#endif
 
     gDPSetEnvColor(gDisplayListHead++, 0, 0, 0, 110);
     gSPDisplayList(gDisplayListHead++, dl_draw_text_bg_box);
@@ -2378,7 +2372,6 @@ void render_pause_course_options(s16 x, s16 y, s8 *index, s16 yIndex) {
         { TEXT_EXIT_COURSE_FR },
         { TEXT_EXIT_COURSE_DE }
     };
-
     u8 textCameraAngleR[][24] = {
         { TEXT_CAMERA_ANGLE_R },
         { TEXT_CAMERA_ANGLE_R_FR },
@@ -2410,7 +2403,9 @@ void render_pause_course_options(s16 x, s16 y, s8 *index, s16 yIndex) {
         gDPSetEnvColor(gDisplayListHead++, 255, 255, 255, gDialogTextAlpha);
         gSPDisplayList(gDisplayListHead++, dl_draw_triangle);
         gSPPopMatrix(gDisplayListHead++, G_MTX_MODELVIEW);
-    } else {
+    }
+
+    if (index[0] == 3) {
         render_pause_camera_options(x - 42, y - 42, &gDialogCameraAngleIndex, 110);
     }
 }
@@ -2608,9 +2603,7 @@ s16 render_pause_courses_and_castle(void) {
 #ifdef VERSION_EU
     gInGameLanguage = eu_get_language();
 #endif
-#ifdef EXT_OPTIONS_MENU
-    if (optmenu_open == 0) {
-#endif
+
     switch (gDialogBoxState) {
         case DIALOG_STATE_OPENING:
             gDialogLineNum = 1;
@@ -2634,9 +2627,8 @@ s16 render_pause_courses_and_castle(void) {
             shade_screen();
             render_pause_my_score_coins();
             render_pause_red_coins();
-            
-/* Added support for the "Exit course at any time" cheat */
-            if ((gMarioStates[0].action & ACT_FLAG_PAUSE_EXIT) || (Cheats.EnableCheats && Cheats.ExitAnywhere)) {
+
+            if (gMarioStates[0].action & ACT_FLAG_PAUSE_EXIT) {
                 render_pause_course_options(99, 93, &gDialogLineNum, 15);
             }
 
@@ -2687,14 +2679,6 @@ s16 render_pause_courses_and_castle(void) {
     if (gDialogTextAlpha < 250) {
         gDialogTextAlpha += 25;
     }
-#ifdef EXT_OPTIONS_MENU
-    } else {
-        shade_screen();
-        optmenu_draw();
-    }
-    optmenu_check_buttons();
-    optmenu_draw_prompt();
-#endif
 
     return 0;
 }
@@ -2937,13 +2921,11 @@ void render_course_complete_lvl_info_and_hud_str(void) {
 #if defined(VERSION_JP) || defined(VERSION_SH)
 #define TXT_SAVECONT_Y 2
 #define TXT_SAVEQUIT_Y 18
-#define TXT_SAVE_EXIT_GAME_Y 38
-#define TXT_CONTNOSAVE_Y 54
+#define TXT_CONTNOSAVE_Y 38
 #else
 #define TXT_SAVECONT_Y 0
 #define TXT_SAVEQUIT_Y 20
-#define TXT_SAVE_EXIT_GAME_Y 40
-#define TXT_CONTNOSAVE_Y 60
+#define TXT_CONTNOSAVE_Y 40
 #endif
 
 #ifdef VERSION_EU
@@ -2965,39 +2947,28 @@ void render_save_confirmation(s16 x, s16 y, s8 *index, s16 sp6e)
         { TEXT_SAVE_AND_QUIT_FR },
         { TEXT_SAVE_AND_QUIT_DE }
     };
-
-    u8 textSaveExitGame[][26] = { // New function to exit game
-        { TEXT_SAVE_EXIT_GAME },
-        { TEXT_SAVE_EXIT_GAME_FR },
-        { TEXT_SAVE_EXIT_GAME_DE }
-    };
-
     u8 textContinueWithoutSaveArr[][27] = {
         { TEXT_CONTINUE_WITHOUT_SAVING },
         { TEXT_CONTINUE_WITHOUT_SAVING_FR },
         { TEXT_CONTINUE_WITHOUT_SAVING_DE }
     };
-
 #define textSaveAndContinue textSaveAndContinueArr[gInGameLanguage]
 #define textSaveAndQuit textSaveAndQuitArr[gInGameLanguage]
-#define textSaveExitGame textSaveExitGame[gInGameLanguage]
 #define textContinueWithoutSave textContinueWithoutSaveArr[gInGameLanguage]
     s16 xOffset = get_str_x_pos_from_center(160, textContinueWithoutSaveArr[gInGameLanguage], 12.0f);
 #else
     u8 textSaveAndContinue[] = { TEXT_SAVE_AND_CONTINUE };
     u8 textSaveAndQuit[] = { TEXT_SAVE_AND_QUIT };
-    u8 textSaveExitGame[] = { TEXT_SAVE_EXIT_GAME };
     u8 textContinueWithoutSave[] = { TEXT_CONTINUE_WITHOUT_SAVING };
 #endif
 
-    handle_menu_scrolling(MENU_SCROLL_VERTICAL, index, 1, 4); // Increased to '4' to handle Exit Game 
+    handle_menu_scrolling(MENU_SCROLL_VERTICAL, index, 1, 3);
 
     gSPDisplayList(gDisplayListHead++, dl_ia_text_begin);
     gDPSetEnvColor(gDisplayListHead++, 255, 255, 255, gDialogTextAlpha);
 
     print_generic_string(TXT_SAVEOPTIONS_X, y + TXT_SAVECONT_Y, textSaveAndContinue);
     print_generic_string(TXT_SAVEOPTIONS_X, y - TXT_SAVEQUIT_Y, textSaveAndQuit);
-    print_generic_string(TXT_SAVEOPTIONS_X, y - TXT_SAVE_EXIT_GAME_Y, textSaveExitGame);
     print_generic_string(TXT_SAVEOPTIONS_X, y - TXT_CONTNOSAVE_Y, textContinueWithoutSave);
 
     gSPDisplayList(gDisplayListHead++, dl_ia_text_end);

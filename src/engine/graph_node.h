@@ -13,13 +13,12 @@
 #define GRAPH_RENDER_Z_BUFFER       (1 << 3)
 #define GRAPH_RENDER_INVISIBLE      (1 << 4)
 #define GRAPH_RENDER_HAS_ANIMATION  (1 << 5)
-#define GRAPH_RENDER_CYLBOARD       (1 << 6)
 
 // Whether the node type has a function pointer of type GraphNodeFunc
 #define GRAPH_NODE_TYPE_FUNCTIONAL            0x100
 
 // Type used for Bowser and an unused geo function in obj_behaviors.c
-#define GRAPH_NODE_TYPE_400                   0x400
+#define GRAPH_NODE_TYPE_400                   0x400				
 
 // The discriminant for different types of geo nodes
 #define GRAPH_NODE_TYPE_ROOT                  0x001
@@ -117,7 +116,7 @@ struct GraphNodePerspective
  */
 struct DisplayListNode
 {
-    Mtx *transform;
+    void *transform;
     void *displayList;
     struct DisplayListNode *next;
 };
@@ -185,7 +184,7 @@ struct GraphNodeCamera
     } config;
     /*0x1C*/ Vec3f pos;
     /*0x28*/ Vec3f focus;
-    /*0x34*/ Mat4 *matrixPtr; // pointer to look-at matrix of this camera as a Mat4
+    /*0x34*/ void *matrixPtr; // pointer to look-at matrix of this camera as a Mat4
     /*0x38*/ s16 roll; // roll in look at matrix. Doesn't account for light direction unlike rollScreen.
     /*0x3A*/ s16 rollScreen; // rolls screen while keeping the light direction consistent
 };

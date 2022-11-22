@@ -1,5 +1,5 @@
-#ifndef _SM64_TYPES_H_
-#define _SM64_TYPES_H_
+#ifndef TYPES_H
+#define TYPES_H
 
 // This file contains various data types used in Super Mario 64 that don't yet
 // have an appropriate header.
@@ -30,9 +30,9 @@ struct Controller
   /*0x12*/ u16 buttonPressed;
   /*0x14*/ OSContStatus *statusData;
   /*0x18*/ OSContPad *controllerData;
+#ifdef VERSION_SH
   /*0x1C*/ int port;
-  /*ext */ s16 extStickX;       // additional (right) stick values
-  /*ext */ s16 extStickY;
+#endif
 };
 
 typedef f32 Vec2f[2];
@@ -131,7 +131,7 @@ struct GraphNodeObject
     /*0x2C*/ Vec3f scale;
     /*0x38*/ struct GraphNodeObject_sub unk38;
     /*0x4C*/ struct SpawnInfo *unk4C;
-    /*0x50*/ Mat4 *throwMatrix; // matrix ptr
+    /*0x50*/ void *throwMatrix; // matrix ptr
     /*0x54*/ Vec3f cameraToObject;
 };
 
@@ -346,4 +346,4 @@ struct MarioState
     /*0xC4*/ f32 unkC4;
 };
 
-#endif // _SM64_TYPES_H_
+#endif // TYPES_H
